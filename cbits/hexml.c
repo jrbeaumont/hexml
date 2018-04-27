@@ -361,8 +361,6 @@ static inline str parse_attrval(document* d)
     }
 }
 
-
-
 // seen a tag name, now looking for attributes terminated by >
 // puts the attributes it finds in the attribute buffer
 static inline str parse_attributes(document* d)
@@ -383,18 +381,21 @@ static inline str parse_attributes(document* d)
 
 static str parse_content(document* d);
 
-
 // Add a new entry into tag, am at a '<'
 static inline void parse_tag(document* d)
 {
     node_alloc(&d->nodes, 1);
     d->nodes.used_back++;
+
+    char c = get(d);
+    assert(c == '<');
+
     node* me = &d->nodes.nodes[d->nodes.size - d->nodes.used_back];
 
     me->outer.start = doc_position(d);
-    char c = get(d);
-    assert(c == '<');
+
     if (peek(d) == '?') skip(d, 1);
+
     me->name = parse_name(d);
     if (me->name.length == 0)
     {
@@ -449,6 +450,38 @@ static inline void parse_tag(document* d)
     set_error(d, "Weirdness when trying to close tags");
 }
 
+static inline bool isCData(document *d)
+{
+    return (peek_at(d, 1) == '!' && 
+            peek_at(d, 2) == '[' && 
+            peek_at(d, 3) == 'C' && 
+            peek_at(d, 4) == 'D' && 
+            peek_at(d, 5) == 'A' &&
+            peek_at(d, 6) == 'T' &&
+            peek_at(d, 7) == 'A' &&
+            peek_at(d, 8) == '[');
+}
+
+//Add CDATA entry to Node. I am after <![CDATA[
+static str parse_CData(document *d)
+{
+    int start = doc_position(d);
+    trim(d);
+    for (;;)
+    {
+        char c = get(d);
+        if (c == ']' && peek(d) == ']' && peek_at(d, 1) == '>') {
+            int end = doc_position(d) - 1;
+            skip(d, 2);
+            break;
+        }
+        printf("%c", c);
+        fflush(stdout);
+    }
+
+    return start_end(start, end);
+}
+
 // Parser until </, return the index of your node children
 // Not inline as it is recursive
 static str parse_content(document* d)
@@ -487,6 +520,11 @@ static str parse_content(document* d)
                 if (peek_at(d, -3) == '-' && peek_at(d, -2) == '-')
                     break;
             }
+        } else if (isCData(d)) 
+        {
+            skip(d, 9);
+            printf("HELLO: %c\n", get(d));
+            parse_CData(d);
         }
         else
         {
